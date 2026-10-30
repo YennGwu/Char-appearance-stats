@@ -1,0 +1,1368 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>人物出场统计 · 章节扫描与可视化</title>
+<link rel="icon" href="data:," />
+<style>
+  :root{
+    --bg:#f6f6f3;
+    --aside:#fbfbf8;
+    --panel:#ffffff;
+    --ink:#1e2329;
+    --ink2:#3a414a;
+    --muted:#6f7781;
+    --faint:#9aa1ab;
+    --line:#e7e8ea;
+    --line-soft:#eff0f1;
+    --accent:#3b6cf6;
+    --ok:#2f855a;
+    --err:#b4492b;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);
+    font:13px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .app{display:flex;height:100vh;overflow:hidden}
+
+  /* ---------- 左侧 ---------- */
+  aside{
+    width:360px;flex:0 0 360px;background:var(--aside);
+    border-right:1px solid var(--line);padding:22px 20px 26px;
+    overflow-y:auto;display:flex;flex-direction:column;gap:20px;
+  }
+  .brand{display:flex;align-items:center;gap:12px}
+  .brand-mark{
+    width:36px;height:36px;border-radius:11px;background:var(--ink);color:#fff;
+    display:flex;align-items:center;justify-content:center;
+    font-size:15px;font-weight:600;letter-spacing:1px;flex:0 0 auto;
+  }
+  .brand h1{font-size:15.5px;margin:0;font-weight:650;letter-spacing:.02em}
+  .brand .sub{font-size:11.5px;color:var(--faint);margin-top:2px}
+  .step{display:flex;flex-direction:column;gap:9px}
+  .step-head{
+    display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;
+    color:var(--ink2);letter-spacing:.02em;
+  }
+  .step-head .num{
+    width:18px;height:18px;border-radius:50%;background:#eceef1;color:#6f7781;
+    display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:600;
+  }
+  .step-head .tip{font-size:10.5px;font-weight:400;color:var(--faint);margin-left:auto}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  textarea{
+    width:100%;background:var(--panel);color:var(--ink);border:1px solid #e3e5e8;
+    border-radius:9px;padding:9px 11px;font:12.5px/1.65 inherit;
+    resize:vertical;outline:none;transition:border-color .15s, box-shadow .15s;
+  }
+  textarea:focus{border-color:#c8d3f5;box-shadow:0 0 0 3px rgba(59,108,246,.08)}
+  textarea::placeholder{color:#b5bbc3}
+  #textInput{height:130px}
+  #namesInput{height:92px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}
+  .hint{font-size:11px;color:var(--faint)}
+  .btn{
+    height:34px;padding:0 13px;border-radius:9px;border:1px solid #e1e3e7;
+    background:var(--panel);color:var(--ink2);font:12.5px inherit;cursor:pointer;
+    transition:background .15s,border-color .15s,transform .1s;white-space:nowrap;
+  }
+  .btn:hover{background:#f7f8f9;border-color:#d3d7dd}
+  .btn:active{transform:translateY(1px)}
+  .btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+  .btn.primary{
+    height:40px;width:100%;background:var(--ink);color:#fff;border-color:var(--ink);
+    font-size:13px;font-weight:600;letter-spacing:.04em;
+  }
+  .btn.primary:hover{background:#2a3038;border-color:#2a3038}
+  .status{min-height:18px;font-size:11.5px;color:var(--faint);line-height:1.6}
+  .status.ok{color:var(--ok)}
+  .status.err{color:var(--err)}
+  .status.busy{color:var(--accent)}
+  .foot{
+    margin-top:auto;padding-top:14px;border-top:1px dashed var(--line);
+    font-size:10.5px;line-height:1.75;color:var(--faint);
+  }
+  .credit{
+    margin-top:8px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+    font-size:10.5px;color:#b0b6be;
+  }
+  .link-btn{
+    background:none;border:none;padding:0;font:inherit;color:#9aa1ab;
+    cursor:pointer;text-decoration:underline;text-underline-offset:2px;
+  }
+  .link-btn:hover{color:var(--ink2)}
+
+  /* ---------- 新手引导 ---------- */
+  .tour[hidden]{display:none}
+  .tour{
+    position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;
+    padding:24px;
+  }
+  .tour-backdrop{
+    position:absolute;inset:0;background:rgba(246,246,243,.8);
+    backdrop-filter:blur(4px);
+  }
+  .tour-card{
+    position:relative;width:min(460px,100%);background:#fff;border:1px solid var(--line);
+    border-radius:16px;padding:28px 28px 22px;
+    box-shadow:0 24px 60px rgba(16,24,40,.13);animation:tourIn .25s ease-out;
+  }
+  @keyframes tourIn{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:none}}
+  .tour-kicker{font-size:10.5px;letter-spacing:.18em;color:var(--faint);font-weight:600}
+  .tour h2{margin:8px 0 0;font-size:20px;font-weight:650;letter-spacing:.01em}
+  .tour-steps{list-style:none;margin:20px 0 22px;padding:0;display:flex;flex-direction:column;gap:16px}
+  .tour-steps li{display:flex;gap:12px;align-items:flex-start}
+  .tour-steps .n{
+    width:24px;height:24px;flex:0 0 auto;border-radius:50%;background:#eef2ff;color:#3b6cf6;
+    display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;
+  }
+  .tour-steps b{display:block;font-size:13px;font-weight:600;color:var(--ink)}
+  .tour-steps span{display:block;font-size:12px;color:var(--muted);line-height:1.7;margin-top:2px}
+  .tour-actions{display:flex;justify-content:flex-end;gap:8px}
+  .tour-actions .btn.primary{width:auto;height:36px;padding:0 18px;font-size:12.5px}
+  .tour-close{
+    position:absolute;top:12px;right:12px;width:30px;height:30px;border:none;background:transparent;
+    color:#a0a6b0;font-size:18px;line-height:1;cursor:pointer;border-radius:8px;
+  }
+  .tour-close:hover{background:#f4f5f6;color:#5f6772}
+  .chapter-list{
+    max-height:168px;overflow-y:auto;background:var(--panel);
+    border:1px solid #e5e7ea;border-radius:10px;padding:5px 6px;
+    font-size:11.5px;
+  }
+  .chapter-list .ch{
+    display:flex;justify-content:space-between;gap:10px;align-items:baseline;
+    padding:4px 8px;border-radius:6px;color:#66707c;
+  }
+  .chapter-list .ch b{
+    font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .chapter-list .ch i{color:#b0b6be;font-style:normal;flex:0 0 auto}
+  .chapter-list .ch.active{background:#edf1fb;color:var(--ink)}
+  .chapter-list .ch.active i{color:#8b96a8}
+  .chapter-list .empty,.chapter-list .more{color:#b0b6be;padding:6px 8px;font-size:11px}
+
+  /* ---------- 右侧 ---------- */
+  main{flex:1;display:flex;flex-direction:column;min-width:0;padding:18px 22px 14px}
+  .toolbar{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:12px}
+  .tabs{display:inline-flex;gap:2px;background:#f0f1f3;padding:3px;border-radius:10px}
+  .tab{
+    border:none;background:transparent;color:#6f7781;font:12.5px inherit;
+    padding:6px 16px;border-radius:8px;cursor:pointer;transition:all .15s;
+  }
+  .tab.active{background:#fff;color:var(--ink);font-weight:600;box-shadow:0 1px 2px rgba(16,24,40,.07)}
+  .tab:disabled{opacity:.55;cursor:not-allowed}
+  .chart-card{
+    position:relative;flex:1;min-height:300px;background:var(--panel);
+    border:1px solid var(--line);border-radius:14px;overflow:hidden;
+    box-shadow:0 1px 2px rgba(16,24,40,.03);
+  }
+  .chart-card svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .controls{display:flex;align-items:center;gap:10px;margin-top:12px;min-height:40px}
+  .icon-btn{
+    width:34px;height:34px;border-radius:9px;border:1px solid #e1e3e7;background:#fff;
+    color:#5f6772;font-size:15px;cursor:pointer;transition:all .15s;padding:0;
+  }
+  .icon-btn:hover{background:#f7f8f9;border-color:#d3d7dd}
+  .icon-btn:disabled{opacity:.4;cursor:not-allowed}
+  #btnPlay{min-width:94px;font-weight:600;color:var(--ink)}
+  #progress{flex:1;accent-color:var(--ink);height:4px;cursor:pointer}
+  #timeLabel{
+    font-size:11.5px;color:var(--faint);font-variant-numeric:tabular-nums;
+    min-width:92px;text-align:right;
+  }
+  select{
+    background:#fff;color:var(--ink2);border:1px solid #e1e3e7;border-radius:9px;
+    padding:7px 8px;font:12.5px inherit;outline:none;cursor:pointer;
+  }
+  @media (max-width:880px){
+    .app{flex-direction:column;height:auto;overflow:visible}
+    aside{width:100%;flex:none;border-right:none;border-bottom:1px solid var(--line)}
+    main{height:76vh;min-height:520px}
+    .toolbar{flex-wrap:wrap}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <aside>
+    <div class="brand">
+      <div class="brand-mark">人</div>
+      <div>
+        <h1>人物出场统计</h1>
+        <div class="sub">章节切分 · 角色识别 · 动态条形图</div>
+      </div>
+    </div>
+
+    <section class="step">
+      <div class="step-head"><span class="num">1</span>文本来源</div>
+      <div class="row">
+        <button class="btn" id="btnFile">选择 TXT</button>
+        <button class="btn" id="btnDemo">载入示例</button>
+      </div>
+      <input type="file" id="fileInput" accept=".txt,text/plain" hidden />
+      <textarea id="textInput" placeholder="或将小说文本粘贴到这里…"></textarea>
+      <div class="hint" id="textHint">0 字</div>
+    </section>
+
+    <section class="step">
+      <div class="step-head"><span class="num">2</span>角色名<span class="tip">每行一个 · 别名用 | 分隔</span></div>
+      <textarea id="namesInput" placeholder="林语棠|语棠&#10;杨岚&#10;伊比娜"></textarea>
+    </section>
+
+    <section class="step">
+      <div class="step-head"><span class="num">3</span>章节切分</div>
+      <div class="chapter-list" id="chapterList"><span class="empty">—</span></div>
+    </section>
+
+    <button class="btn primary" id="btnRun">开始统计</button>
+    <div class="status" id="status"></div>
+
+    <div class="foot">
+      <div>统计口径：角色名或别名每出现一次记 1 次提及；匹配时长名优先，避免「语棠」抢占「林语棠」。</div>
+      <div class="credit">
+        <span>作者 云舸</span><span>·</span>
+        <button class="link-btn" id="btnTour">使用提示</button><span>·</span>
+        <span>Trae 协助构建</span>
+      </div>
+    </div>
+  </aside>
+
+  <main>
+    <div class="toolbar">
+      <div class="tabs" id="tabs">
+        <button class="tab active" data-mode="chapter">分章统计</button>
+        <button class="tab" data-mode="total">全文累计</button>
+      </div>
+      <div class="row">
+        <button class="btn" id="btnPng">导出 PNG</button>
+        <button class="btn" id="btnGif">导出 GIF</button>
+      </div>
+    </div>
+
+    <div class="chart-card" id="chartCard">
+      <svg id="chart"></svg>
+    </div>
+
+    <div class="controls">
+      <button class="icon-btn" id="btnPrev" title="上一章">‹</button>
+      <button class="btn" id="btnPlay">▶ 播放</button>
+      <button class="icon-btn" id="btnNext" title="下一章">›</button>
+      <input type="range" id="progress" min="0" max="1" step="1" value="0" />
+      <span id="timeLabel">—</span>
+      <select id="speed">
+        <option value="0.5">0.5x</option>
+        <option value="1" selected>1x</option>
+        <option value="2">2x</option>
+        <option value="4">4x</option>
+      </select>
+    </div>
+  </main>
+
+</div>
+
+<div class="tour" id="tour" hidden>
+  <div class="tour-backdrop"></div>
+  <div class="tour-card" role="dialog" aria-modal="true" aria-labelledby="tourTitle">
+    <button class="tour-close" id="tourClose" aria-label="关闭引导">×</button>
+    <div class="tour-kicker">QUICK START</div>
+    <h2 id="tourTitle">三步生成人物出场统计</h2>
+    <ol class="tour-steps">
+      <li>
+        <span class="n">1</span>
+        <div><b>导入文本</b><span>点击左侧「选择 TXT」，导入你自己的小说文档；也可以直接把文本粘贴进输入框。</span></div>
+      </li>
+      <li>
+        <span class="n">2</span>
+        <div><b>手动输入角色名</b><span>在「角色名」中填写需要统计的人物，每行一个；有别名时用 | 分隔，例如「林语棠|语棠」。</span></div>
+      </li>
+      <li>
+        <span class="n">3</span>
+        <div><b>统计与导出</b><span>点击「开始统计」，在「分章统计 / 全文累计」之间切换，随时导出 PNG 或 GIF。</span></div>
+      </li>
+    </ol>
+    <div class="tour-actions">
+      <button class="btn" id="tourSkip">跳过</button>
+      <button class="btn primary" id="tourDone">开始使用</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   0. 基础工具
+   ========================================================= */
+const SVGNS = 'http://www.w3.org/2000/svg';
+const FONT = '-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif';
+const $ = id => document.getElementById(id);
+const escapeRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const lerp = (a, b, p) => a + (b - a) * p;
+const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+const tick = () => new Promise(r => setTimeout(r, 0));
+
+const BAR_COLORS = [
+  '#6f95f5','#f0a07c','#4fc3a1','#eec35c','#a78bfa','#ef8fb0',
+  '#78c6e8','#b3d47c','#efa268','#cf9bea','#7bd3c4','#ed9bbb'
+];
+
+const FRAME_MS = 900;   // 每章过渡时长
+const TOP_N = 12;       // 最多同时展示的条形数
+
+/* =========================================================
+   1. 全局状态
+   ========================================================= */
+const state = {
+  chapters: [],
+  names: [],
+  colors: [],
+  per: [],          // 每章 counts
+  cum: [],          // 累计 counts
+  mode: 'chapter',  // chapter | total
+  maxVal: 1,
+  maxChapter: 1,
+  maxTotal: 1,
+  totalMentions: 0,
+  cursor: 0,
+  total: 0,
+  playing: false,
+  speed: 1,
+  lastTs: 0,
+  ready: false,
+  liveCtx: null,
+};
+
+/* =========================================================
+   2. 章节切分
+   ========================================================= */
+const CHAPTER_RE = /^[ \t　]*(第[零一二三四五六七八九十百千两\d]+[章节回卷篇幕][^\n]{0,40}|序章[^\n]{0,20}|楔子[^\n]{0,20}|尾声[^\n]{0,20}|终章[^\n]{0,20}|番外[^\n]{0,20}|Chapter\s+\d+[^\n]{0,40})[ \t]*$/gm;
+
+function splitChapters(raw) {
+  const text = String(raw).replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+  const marks = [];
+  CHAPTER_RE.lastIndex = 0;
+  let m;
+  while ((m = CHAPTER_RE.exec(text))) {
+    marks.push({ title: m[1].trim(), index: m.index, end: m.index + m[0].length });
+  }
+
+  if (!marks.length) return [{ title: '全文', content: text.trim() }];
+
+  const out = [];
+  if (marks[0].index > 0) {
+    const head = text.slice(0, marks[0].index).trim();
+    // 只有书名、作者等极短标题页才忽略；序言正文保留为独立章节
+    if (head && head.replace(/\s/g, '').length > 120) {
+      out.push({ title: '（前言）', content: head });
+    }
+  }
+  marks.forEach((mk, i) => {
+    const next = marks[i + 1] ? marks[i + 1].index : text.length;
+    out.push({ title: mk.title, content: text.slice(mk.end, next).trim() });
+  });
+  return out;
+}
+
+/* =========================================================
+   3. 人物表解析
+   ========================================================= */
+function parseGroups(raw) {
+  return String(raw)
+    .split(/[\n,，、;；]+/)
+    .map(s => s.trim())
+    .filter(Boolean)
+    .map(s => {
+      const parts = s.split(/[|｜]/).map(x => x.trim()).filter(Boolean);
+      return parts.length ? parts : null;
+    })
+    .filter(Boolean);
+}
+
+/* =========================================================
+   4. 统计（长名优先 + 单次扫描）
+   ========================================================= */
+function computeStats(chapters, groups) {
+  const pairs = [];
+  groups.forEach((g, gi) => g.forEach(alias => pairs.push({ alias, gi })));
+  pairs.sort((x, y) => y.alias.length - x.alias.length || (x.alias < y.alias ? -1 : 1));
+
+  const aliasToGroup = new Map();
+  for (const p of pairs) if (!aliasToGroup.has(p.alias)) aliasToGroup.set(p.alias, p.gi);
+
+  const pattern = new RegExp(pairs.map(p => escapeRe(p.alias)).join('|'), 'g');
+
+  return chapters.map(ch => {
+    const counts = new Array(groups.length).fill(0);
+    pattern.lastIndex = 0;
+    let m;
+    while ((m = pattern.exec(ch.content))) {
+      const gi = aliasToGroup.get(m[0]);
+      if (gi !== undefined) counts[gi]++;
+      if (m[0] === '') pattern.lastIndex++;
+    }
+    return { label: ch.title, counts };
+  });
+}
+
+/* =========================================================
+   5. 图表几何与绘制
+   ========================================================= */
+function hasData() {
+  return state.ready && state.chapters.length > 0 && state.names.length > 0;
+}
+
+function geomFor(W, H) {
+  let maxName = 3;
+  for (const n of state.names) maxName = Math.max(maxName, n.length);
+  const left = clamp(32 + Math.min(maxName, 9) * 13.5 + 22, 104, 232);
+  const innerW = Math.max(60, W - left - 52);
+  const innerH = Math.max(60, H - 122 - 46);
+  const rows = Math.max(1, Math.min(state.names.length || 1, TOP_N));
+  const rowH = clamp(innerH / rows, 16, 62);
+  const barH = clamp(rowH - 12, 10, 26);
+  return { left, top: 122, innerW, innerH, rows, rowH, barH };
+}
+
+function chapterShort(title, len = 22) {
+  const s = String(title || '');
+  return s.length > len ? s.slice(0, len - 1) + '…' : s;
+}
+
+function countsAt(i) {
+  const arr = state.mode === 'chapter' ? state.per : state.cum;
+  return arr[i] || [];
+}
+
+function svgEl(tag, attrs, parent) {
+  const el = document.createElementNS(SVGNS, tag);
+  if (attrs) for (const k in attrs) el.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(el);
+  return el;
+}
+
+function niceStep(maxVal, count = 5) {
+  const raw = Math.max(1, maxVal) / count;
+  const exp = Math.floor(Math.log10(raw));
+  const f = raw / Math.pow(10, exp);
+  const nf = f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10;
+  return Math.max(1, nf * Math.pow(10, exp));
+}
+
+function niceScale(maxVal, innerW) {
+  const step = niceStep(maxVal);
+  const domainMax = Math.max(step, Math.ceil(Math.max(1, maxVal) / step) * step);
+  const ticks = [];
+  for (let v = 0; v <= domainMax + step * 1e-6; v += step) ticks.push(v);
+  return {
+    domainMax,
+    ticks,
+    x: v => clamp(v / domainMax, 0, 1) * innerW,
+  };
+}
+
+function prepareChart(node, W, H) {
+  node.replaceChildren();
+  node.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  node.setAttribute('width', W);
+  node.setAttribute('height', H);
+  node.setAttribute('font-family', FONT);
+
+  svgEl('rect', { x: 0, y: 0, width: W, height: H, fill: '#ffffff' }, node);
+
+  if (!hasData()) {
+    svgEl('text', {
+      x: W / 2, y: H / 2 - 4, 'text-anchor': 'middle',
+      'font-size': 15, fill: '#9aa1ab',
+    }, node).textContent = '先在左侧载入文本与角色名';
+    svgEl('text', {
+      x: W / 2, y: H / 2 + 22, 'text-anchor': 'middle',
+      'font-size': 12, fill: '#b6bcc5',
+    }, node).textContent = '点击「开始统计」生成图表';
+    return null;
+  }
+
+  const geom = geomFor(W, H);
+  const scale = niceScale(Math.max(1, state.maxVal), geom.innerW);
+
+  /* 顶部信息 */
+  svgEl('text', {
+    x: 32, y: 34, 'font-size': 11, 'letter-spacing': '2', fill: '#a0a6b0',
+  }, node).textContent = '人物出场统计';
+
+  svgEl('text', {
+    x: W - 32, y: 34, 'text-anchor': 'end', 'font-size': 11, fill: '#a0a6b0',
+  }, node).textContent = `${state.chapters.length} 章 · ${state.names.length} 位角色 · ${state.totalMentions} 次提及`;
+
+  const titleEl = svgEl('text', {
+    class: 'chapter-title', x: 32, y: 72,
+    'font-size': 22, 'font-weight': 650, fill: '#1f2328',
+  }, node);
+
+  const indexEl = svgEl('text', {
+    class: 'chapter-index', x: W - 32, y: 72,
+    'text-anchor': 'end', 'font-size': 12, fill: '#8b929c',
+  }, node);
+
+  svgEl('text', {
+    x: 32, y: 94, 'font-size': 12, fill: '#7c838e',
+  }, node).textContent = (state.mode === 'chapter'
+    ? '分章统计 · 本章具名提及次数'
+    : '全文累计 · 截至本章的累计提及次数')
+    + (state.names.length > TOP_N ? ` · 仅显示前 ${TOP_N} 位` : '');
+
+  svgEl('line', {
+    x1: 32, y1: 108, x2: W - 32, y2: 108,
+    stroke: '#eef0f2', 'stroke-width': 1,
+  }, node);
+
+  /* 坐标轴与网格 */
+  const grid = svgEl('g', { transform: `translate(${geom.left},${geom.top})` }, node);
+
+  scale.ticks.forEach(v => {
+    svgEl('line', {
+      x1: scale.x(v), x2: scale.x(v), y1: 0, y2: geom.innerH,
+      stroke: '#f3f4f6', 'stroke-width': 1,
+    }, grid);
+    svgEl('text', {
+      x: scale.x(v), y: geom.innerH + 19, 'text-anchor': 'middle',
+      'font-size': 10.5, fill: '#a0a6b0', style: 'font-variant-numeric:tabular-nums',
+    }, grid).textContent = v;
+  });
+
+  svgEl('line', {
+    x1: 0, x2: geom.innerW, y1: geom.innerH, y2: geom.innerH,
+    stroke: '#e8eaee', 'stroke-width': 1,
+  }, grid);
+
+  const barsEl = svgEl('g', {
+    class: 'bars', transform: `translate(${geom.left},${geom.top})`,
+  }, node);
+
+  return { node, W, H, geom, scale, titleEl, indexEl, barsEl };
+}
+
+function frameInfo(t) {
+  const n = state.chapters.length;
+  if (n <= 1) return { i: 0, p: 1, idx: 0 };
+  const i = Math.min(Math.floor(t / FRAME_MS), n - 2);
+  const p = clamp((t - i * FRAME_MS) / FRAME_MS, 0, 1);
+  const idx = Math.min(Math.round(t / FRAME_MS), n - 1);
+  return { i, p, idx };
+}
+
+function paintChart(ctx, t, live = false) {
+  if (!ctx || !hasData()) return;
+  const n = state.chapters.length;
+  const { i, p, idx } = frameInfo(t);
+  const A = countsAt(i);
+  const B = countsAt(Math.min(i + 1, n - 1));
+  const g = ctx.geom;
+
+  ctx.titleEl.textContent = chapterShort(
+    state.chapters[idx].title,
+    Math.max(8, Math.floor((ctx.W - 160) / 20))
+  );
+  ctx.indexEl.textContent = `${idx + 1} / ${n} 章`;
+
+  const rows = state.names.map((name, k) => ({
+    name,
+    value: lerp(A[k] || 0, B[k] || 0, p),
+    color: state.colors[k],
+  })).sort((a, b) => b.value - a.value || (a.name < b.name ? -1 : 1));
+
+  const shown = rows.slice(0, TOP_N);
+  ctx.barsEl.replaceChildren();
+
+  shown.forEach((d, rank) => {
+    const width = Math.max(0, ctx.scale.x(d.value));
+    const y = rank * g.rowH + (g.rowH - g.barH) / 2;
+    const grp = svgEl('g', { class: 'bar', transform: `translate(0,${y})` }, ctx.barsEl);
+
+    svgEl('rect', {
+      y: 0, rx: 4, height: g.barH, width, fill: d.color,
+    }, grp);
+
+    svgEl('text', {
+      class: 'bname', x: -14, y: g.barH / 2,
+      'text-anchor': 'end', 'font-size': 13, 'font-weight': 500,
+      'dominant-baseline': 'middle', fill: '#333a44',
+    }, grp).textContent = d.name;
+
+    svgEl('text', {
+      class: 'bval', x: width + 8, y: g.barH / 2,
+      'font-size': 12, 'dominant-baseline': 'middle', fill: '#8b929c',
+      style: 'font-variant-numeric:tabular-nums',
+    }, grp).textContent = Math.round(d.value);
+  });
+
+  if (live) setActiveChapter(idx);
+}
+
+/* =========================================================
+   6. 实时图表 / 播放控制
+   ========================================================= */
+function boxSize() {
+  const box = $('chartCard');
+  return {
+    W: Math.max(320, Math.round(box.clientWidth || 720)),
+    H: Math.max(280, Math.round(box.clientHeight || 480)),
+  };
+}
+
+function rebuildLive() {
+  const { W, H } = boxSize();
+  state.maxVal = state.mode === 'chapter' ? state.maxChapter : state.maxTotal;
+  state.liveCtx = prepareChart($('chart'), W, H);
+  paintChart(state.liveCtx, state.cursor, true);
+}
+
+function setActiveChapter(idx) {
+  const list = $('chapterList');
+  const old = list.querySelector('.ch.active');
+  if (old) old.classList.remove('active');
+  const el = list.querySelector(`.ch[data-i="${idx}"]`);
+  if (el) el.classList.add('active');
+}
+
+function syncUI() {
+  const n = state.chapters.length;
+  const pr = $('progress');
+  pr.max = state.total || 1;
+  pr.value = state.cursor;
+
+  $('timeLabel').textContent = n
+    ? `${Math.min(Math.round(state.cursor / FRAME_MS) + 1, n)} / ${n} 章`
+    : '—';
+
+  const btn = $('btnPlay');
+  if (!hasData() || state.total <= 0) {
+    btn.textContent = '▶ 播放';
+    btn.disabled = true;
+  } else {
+    btn.disabled = false;
+    btn.textContent = state.playing ? '⏸ 暂停' : (state.cursor >= state.total ? '↻ 重播' : '▶ 播放');
+  }
+  $('btnPrev').disabled = !hasData() || n <= 1;
+  $('btnNext').disabled = !hasData() || n <= 1;
+}
+
+function loop(ts) {
+  if (!state.playing) return;
+  if (!state.lastTs) state.lastTs = ts;
+  const dt = ts - state.lastTs;
+  state.lastTs = ts;
+
+  state.cursor = Math.min(state.total, state.cursor + dt * state.speed);
+  if (state.cursor >= state.total) {
+    state.playing = false;
+  }
+
+  paintChart(state.liveCtx, state.cursor, true);
+  syncUI();
+
+  if (state.playing) requestAnimationFrame(loop);
+}
+
+function play() {
+  if (!hasData() || state.total <= 0) return;
+  if (state.cursor >= state.total) state.cursor = 0;
+  state.playing = true;
+  state.lastTs = 0;
+  syncUI();
+  requestAnimationFrame(loop);
+}
+
+function pause() {
+  state.playing = false;
+  syncUI();
+}
+
+function lockUi(locked) {
+  ['btnRun', 'btnFile', 'btnDemo', 'btnPlay', 'btnPrev', 'btnNext', 'btnPng', 'progress', 'speed']
+    .forEach(id => { $(id).disabled = locked; });
+  [...$('tabs').children].forEach(t => { t.disabled = locked; });
+}
+
+function goToChapter(idx) {
+  const n = state.chapters.length;
+  if (!hasData() || n <= 1) return;
+  idx = clamp(idx, 0, n - 1);
+  state.playing = false;
+  state.cursor = idx === n - 1 ? state.total : idx * FRAME_MS;
+  paintChart(state.liveCtx, state.cursor, true);
+  syncUI();
+}
+
+/* =========================================================
+   7. 界面：章节列表 / 文件读取 / 状态
+   ========================================================= */
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+function renderChapterList(chapters) {
+  const box = $('chapterList');
+  const MAX = 80;
+  box.innerHTML = chapters.slice(0, MAX).map((ch, i) => `
+    <div class="ch" data-i="${i}" title="${escapeHtml(ch.title)}">
+      <b>${escapeHtml(ch.title)}</b><i>${ch.content.length} 字</i>
+    </div>
+  `).join('') + (chapters.length > MAX
+    ? `<div class="more">… 还有 ${chapters.length - MAX} 章</div>`
+    : '');
+  box.scrollTop = 0;
+}
+
+function refreshChapterPreview() {
+  const raw = $('textInput').value;
+  const box = $('chapterList');
+
+  $('textHint').textContent = raw.trim()
+    ? `${raw.replace(/\s/g, '').length.toLocaleString()} 字`
+    : '0 字';
+
+  if (!raw.trim()) {
+    box.innerHTML = '<span class="empty">—</span>';
+    return;
+  }
+
+  const chapters = splitChapters(raw);
+  if (chapters.length === 1 && chapters[0].title === '全文') {
+    box.innerHTML = '<span class="empty">未识别到章节标题，将作为「全文」单章统计</span>';
+    return;
+  }
+  renderChapterList(chapters);
+}
+
+function setStatus(msg, kind = '') {
+  const el = $('status');
+  el.textContent = msg || '';
+  el.className = 'status' + (kind ? ' ' + kind : '');
+}
+
+async function readFileSmart(file) {
+  const buf = await file.arrayBuffer();
+  const u8 = new Uint8Array(buf);
+
+  if (u8[0] === 0xFF && u8[1] === 0xFE) {
+    return new TextDecoder('utf-16le').decode(buf).replace(/^\uFEFF/, '');
+  }
+  if (u8[0] === 0xFE && u8[1] === 0xFF) {
+    return new TextDecoder('utf-16be').decode(buf).replace(/^\uFEFF/, '');
+  }
+
+  let text = new TextDecoder('utf-8').decode(buf);
+  const bad = (text.match(/\uFFFD/g) || []).length;
+  if (bad > 20) {
+    try {
+      const gbk = new TextDecoder('gbk').decode(buf);
+      if ((gbk.match(/\uFFFD/g) || []).length < bad) text = gbk;
+    } catch (_) { /* 浏览器不支持则保持 UTF-8 */ }
+  }
+  return text.replace(/^\uFEFF/, '');
+}
+
+/* =========================================================
+   8. 主流程
+   ========================================================= */
+function run() {
+  const raw = $('textInput').value;
+  const groups = parseGroups($('namesInput').value);
+
+  if (!raw.trim()) { setStatus('请先上传或粘贴小说文本', 'err'); return; }
+  if (!groups.length) { setStatus('请填写角色名，例如：林语棠|语棠', 'err'); return; }
+
+  const chapters = splitChapters(raw);
+  const per = computeStats(chapters, groups);
+  const cum = [];
+  let running = new Array(groups.length).fill(0);
+  per.forEach(f => {
+    running = running.map((v, k) => v + f.counts[k]);
+    cum.push(running.slice());
+  });
+
+  let maxChapter = 1;
+  per.forEach(f => f.counts.forEach(v => { if (v > maxChapter) maxChapter = v; }));
+  let maxTotal = 1;
+  cum.forEach(counts => counts.forEach(v => { if (v > maxTotal) maxTotal = v; }));
+
+  state.chapters = chapters;
+  state.names = groups.map(g => g[0]);
+  state.colors = groups.map((_, i) => BAR_COLORS[i % BAR_COLORS.length]);
+  state.per = per.map(f => f.counts);
+  state.cum = cum;
+  state.maxChapter = maxChapter;
+  state.maxTotal = maxTotal;
+  state.totalMentions = per.reduce((s, f) => s + f.counts.reduce((a, b) => a + b, 0), 0);
+  state.total = Math.max(0, (chapters.length - 1) * FRAME_MS);
+  state.cursor = 0;
+  state.playing = false;
+  state.ready = true;
+
+  renderChapterList(chapters);
+  rebuildLive();
+  syncUI();
+
+  const single = chapters.length === 1 && chapters[0].title === '全文';
+  setStatus(
+    `✓ ${single ? '全文单章' : chapters.length + ' 章'} · ${groups.length} 位角色 · 共 ${state.totalMentions} 次提及`,
+    'ok'
+  );
+}
+
+/* =========================================================
+   9. PNG 导出
+   ========================================================= */
+async function rasterizeSvg(svgStr, W, H, scale = 1) {
+  const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const img = new Image();
+  await new Promise((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = () => reject(new Error('SVG 栅格化失败'));
+    img.src = url;
+  });
+
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(W * scale);
+  canvas.height = Math.round(H * scale);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+  URL.revokeObjectURL(url);
+  return canvas;
+}
+
+function downloadBlob(blob, name) {
+  const a = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+function safeName(s) {
+  return String(s || '').replace(/[\\/:*?"<>|\s]/g, '').slice(0, 40);
+}
+
+function pngFileName() {
+  const { idx } = frameInfo(state.cursor);
+  const tag = state.mode === 'chapter' ? '分章' : '累计';
+  const ch = state.chapters[idx] ? state.chapters[idx].title : '';
+  return `人物出场_${tag}_${String(idx + 1).padStart(2, '0')}${ch ? '_' + safeName(ch) : ''}.png`;
+}
+
+async function exportPng() {
+  if (!hasData()) { setStatus('请先开始统计', 'err'); return; }
+  const btn = $('btnPng');
+  btn.disabled = true;
+  btn.textContent = '导出中…';
+  try {
+    pause();
+    const { W, H } = boxSize();
+    const clone = $('chart').cloneNode(true);
+    clone.setAttribute('xmlns', SVGNS);
+    clone.setAttribute('width', W);
+    clone.setAttribute('height', H);
+    const str = new XMLSerializer().serializeToString(clone);
+    const canvas = await rasterizeSvg(str, W, H, 2);
+    const blob = await new Promise((resolve, reject) => {
+      canvas.toBlob(b => (b ? resolve(b) : reject(new Error('PNG 生成失败'))), 'image/png');
+    });
+    downloadBlob(blob, pngFileName());
+    setStatus(`✓ PNG 已导出（${Math.round(W * 2)} × ${Math.round(H * 2)}）`, 'ok');
+  } catch (e) {
+    setStatus('PNG 导出失败：' + e.message, 'err');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '导出 PNG';
+  }
+}
+
+/* =========================================================
+   10. GIF 导出（内置编码器，无外部依赖）
+   ========================================================= */
+const GIF_W = 960;
+const GIF_H = 540;
+
+function hexRgb(hex) {
+  const h = hex.replace('#', '');
+  return [
+    parseInt(h.slice(0, 2), 16),
+    parseInt(h.slice(2, 4), 16),
+    parseInt(h.slice(4, 6), 16),
+  ];
+}
+
+function buildGifPalette() {
+  const map = new Map();
+  const add = (r, g, b) => {
+    const k = (r << 16) | (g << 8) | b;
+    if (!map.has(k)) map.set(k, [r, g, b]);
+  };
+
+  for (let v = 0; v <= 255; v += 6) add(v, v, v);
+  ['#ffffff', '#1f2328', '#333a44', '#6b7280', '#8b929c', '#9aa1ab',
+   '#d1d5db', '#e8eaee', '#eef0f2', '#f3f4f6', '#3b6cf6'].forEach(h => {
+    add(...hexRgb(h));
+  });
+
+  BAR_COLORS.forEach(h => {
+    const c = hexRgb(h);
+    add(...c);
+    [0.12, 0.25, 0.4, 0.55, 0.7, 0.85].forEach(t => {
+      add(...c.map(v => Math.round(v + (255 - v) * t)));
+    });
+  });
+
+  return [...map.values()];
+}
+
+function buildLut(palette) {
+  const lut = new Uint8Array(32768);
+  for (let i = 0; i < 32768; i++) {
+    const r = (((i >> 10) & 31) << 3) | 4;
+    const g = (((i >> 5) & 31) << 3) | 4;
+    const b = ((i & 31) << 3) | 4;
+    let best = 0, bestD = Infinity;
+    for (let p = 0; p < palette.length; p++) {
+      const c = palette[p];
+      const dr = r - c[0], dg = g - c[1], db = b - c[2];
+      const d = dr * dr + dg * dg + db * db;
+      if (d < bestD) { bestD = d; best = p; }
+    }
+    lut[i] = best;
+  }
+  return lut;
+}
+
+function mapPixels(canvas, lut) {
+  const ctx = canvas.getContext('2d');
+  const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const count = canvas.width * canvas.height;
+  const out = new Uint8Array(count);
+  for (let i = 0, p = 0; i < count; i++, p += 4) {
+    out[i] = lut[((data[p] >> 3) << 10) | ((data[p + 1] >> 3) << 5) | (data[p + 2] >> 3)];
+  }
+  return out;
+}
+
+function lzwEncode(indices, minCodeSize) {
+  const clearCode = 1 << minCodeSize;
+  const eoiCode = clearCode + 1;
+  let codeSize = minCodeSize + 1;
+  let nextCode = eoiCode + 1;
+  let dict = new Int16Array(1 << 20).fill(-1);
+  const out = [];
+  let bitBuf = 0, bitCount = 0;
+
+  const emit = code => {
+    bitBuf |= code << bitCount;
+    bitCount += codeSize;
+    while (bitCount >= 8) {
+      out.push(bitBuf & 255);
+      bitBuf >>>= 8;
+      bitCount -= 8;
+    }
+    if (nextCode > (1 << codeSize) - 1 && codeSize < 12) codeSize++;
+  };
+
+  emit(clearCode);
+  let prev = indices[0];
+
+  for (let i = 1; i < indices.length; i++) {
+    const c = indices[i];
+    const key = prev * 256 + c;
+    const found = dict[key];
+    if (found !== -1) { prev = found; continue; }
+
+    emit(prev);
+    if (nextCode < 4096) {
+      dict[key] = nextCode;
+      nextCode++;
+    } else {
+      emit(clearCode);
+      dict = new Int16Array(1 << 20).fill(-1);
+      codeSize = minCodeSize + 1;
+      nextCode = eoiCode + 1;
+    }
+    prev = c;
+  }
+
+  emit(prev);
+  emit(eoiCode);
+  if (bitCount > 0) out.push(bitBuf & 255);
+  return out;
+}
+
+class GifBuilder {
+  constructor(w, h, palette) {
+    this.w = w;
+    this.h = h;
+    this.palette = palette;
+    this.frames = [];
+  }
+  add(indices, delayCs) {
+    this.frames.push({ indices, delayCs });
+  }
+  build() {
+    const out = [];
+    const push2 = v => { out.push(v & 255, (v >> 8) & 255); };
+
+    out.push(0x47, 0x49, 0x46, 0x38, 0x39, 0x61); // GIF89a
+    push2(this.w);
+    push2(this.h);
+    out.push(0xF7, 0x00, 0x00);
+
+    for (let i = 0; i < 256; i++) {
+      const c = this.palette[i] || this.palette[0] || [255, 255, 255];
+      out.push(c[0], c[1], c[2]);
+    }
+
+    out.push(0x21, 0xFF, 0x0B);
+    for (let i = 0; i < 11; i++) out.push('NETSCAPE2.0'.charCodeAt(i));
+    out.push(0x03, 0x01, 0x00, 0x00, 0x00);
+
+    for (const f of this.frames) {
+      out.push(0x21, 0xF9, 0x04, 0x04);
+      push2(f.delayCs);
+      out.push(0x00, 0x00);
+
+      out.push(0x2C);
+      push2(0); push2(0); push2(this.w); push2(this.h);
+      out.push(0x00);
+
+      out.push(8);
+      const data = lzwEncode(f.indices, 8);
+      for (let i = 0; i < data.length; i += 255) {
+        const len = Math.min(255, data.length - i);
+        out.push(len);
+        for (let j = 0; j < len; j++) out.push(data[i + j]);
+      }
+      out.push(0x00);
+    }
+
+    out.push(0x3B);
+    return new Blob([new Uint8Array(out)], { type: 'image/gif' });
+  }
+}
+
+function renderFrameSvg(t, W, H) {
+  const node = document.createElementNS(SVGNS, 'svg');
+  node.setAttribute('xmlns', SVGNS);
+  const ctx = prepareChart(node, W, H);
+  if (ctx) paintChart(ctx, t, false);
+  node.setAttribute('width', W);
+  node.setAttribute('height', H);
+  return new XMLSerializer().serializeToString(node);
+}
+
+async function exportGif() {
+  if (!hasData()) { setStatus('请先开始统计', 'err'); return; }
+  const btn = $('btnGif');
+  const pngBtn = $('btnPng');
+  pause();
+  lockUi(true);
+  btn.disabled = true;
+  pngBtn.disabled = true;
+
+  try {
+    const times = [];
+    let step = 300;
+    const MAX_FRAMES = 130;
+    if (state.total > 0) {
+      step = Math.max(280, Math.ceil((state.total / MAX_FRAMES) / 10) * 10);
+      for (let t = 0; t <= state.total; t += step) times.push(Math.min(t, state.total));
+    } else {
+      times.push(0);
+    }
+    if (times[times.length - 1] !== state.total) times.push(state.total);
+
+    const palette = buildGifPalette();
+    const lut = buildLut(palette);
+    const builder = new GifBuilder(GIF_W, GIF_H, palette);
+    const delay = Math.max(2, Math.round(step / 10));
+
+    for (let fi = 0; fi < times.length; fi++) {
+      const str = renderFrameSvg(times[fi], GIF_W, GIF_H);
+      const canvas = await rasterizeSvg(str, GIF_W, GIF_H, 1);
+      builder.add(mapPixels(canvas, lut), fi === times.length - 1 ? 110 : delay);
+
+      btn.textContent = `导出中 ${Math.round((fi + 1) / times.length * 100)}%`;
+      if (fi % 3 === 0) await tick();
+    }
+
+    const blob = builder.build();
+    downloadBlob(blob, `人物出场_${state.mode === 'chapter' ? '分章' : '累计'}_动画.gif`);
+    setStatus(`✓ GIF 已导出（${times.length} 帧 · ${GIF_W}×${GIF_H}）`, 'ok');
+  } catch (e) {
+    console.error(e);
+    setStatus('GIF 导出失败：' + e.message, 'err');
+  } finally {
+    btn.disabled = false;
+    pngBtn.disabled = false;
+    btn.textContent = '导出 GIF';
+    lockUi(false);
+    syncUI();
+  }
+}
+
+/* =========================================================
+   11. 事件绑定
+   ========================================================= */
+$('btnRun').addEventListener('click', run);
+
+$('btnFile').addEventListener('click', () => $('fileInput').click());
+$('fileInput').addEventListener('change', async e => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  try {
+    const text = await readFileSmart(file);
+    $('textInput').value = text;
+    refreshChapterPreview();
+    setStatus(`已读取 ${file.name}（${(file.size / 1024).toFixed(0)} KB），确认角色名后点击统计`, 'ok');
+  } catch (err) {
+    setStatus('读取失败：' + err.message, 'err');
+  }
+  e.target.value = '';
+});
+
+let previewTimer = null;
+$('textInput').addEventListener('input', () => {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(refreshChapterPreview, 220);
+});
+
+$('tabs').addEventListener('click', e => {
+  const tab = e.target.closest('.tab');
+  if (!tab) return;
+  const mode = tab.dataset.mode;
+  if (mode === state.mode) return;
+
+  state.mode = mode;
+  state.playing = false;
+  state.lastTs = 0;
+  if (state.total > 0) state.cursor = Math.min(state.cursor, state.total);
+  [...$('tabs').children].forEach(t => t.classList.toggle('active', t === tab));
+
+  if (hasData()) rebuildLive();
+  else {
+    state.liveCtx = prepareChart($('chart'), boxSize().W, boxSize().H);
+  }
+  syncUI();
+});
+
+$('btnPlay').addEventListener('click', () => {
+  if (state.playing) pause(); else play();
+});
+
+$('btnPrev').addEventListener('click', () => {
+  if (!hasData()) return;
+  const { idx } = frameInfo(state.cursor);
+  goToChapter(idx - 1);
+});
+$('btnNext').addEventListener('click', () => {
+  if (!hasData()) return;
+  const { idx } = frameInfo(state.cursor);
+  goToChapter(idx + 1);
+});
+
+$('speed').addEventListener('change', e => {
+  state.speed = parseFloat(e.target.value) || 1;
+  state.lastTs = 0;
+});
+
+$('progress').addEventListener('input', e => {
+  if (!hasData()) return;
+  state.cursor = Number(e.target.value);
+  state.lastTs = 0;
+  paintChart(state.liveCtx, state.cursor, true);
+  syncUI();
+});
+
+$('btnPng').addEventListener('click', exportPng);
+$('btnGif').addEventListener('click', exportGif);
+
+const ro = new ResizeObserver(() => {
+  if (!state.ready) {
+    state.liveCtx = prepareChart($('chart'), boxSize().W, boxSize().H);
+    return;
+  }
+  rebuildLive();
+});
+ro.observe($('chartCard'));
+
+/* =========================================================
+   12. 示例数据（原创短篇）
+   ========================================================= */
+const DEMO_TEXT = `第一章 雨夜来客
+
+雨下了整夜。
+
+沈砚推开客栈的木门时，浑身已经湿透。柜台后的苏晚抬起头，看了他一眼，什么也没说，只是把一盏油灯往前推了推。
+
+沈砚在角落坐下，从怀里摸出一张折得发皱的纸。纸上是半张地图，边角被雨水泡烂了。苏晚的目光扫过去，停了一瞬。
+
+「后山的路，三年前就封了。」苏晚说。
+
+沈砚没有接话。他把纸收回去，说了声多谢，起身往外走。
+
+苏晚看着他的背影融进雨里。她见过太多这样的人，来了，问了，走了，再也没有回来。
+
+第二天清晨，沈砚又出现了。这一次他带着一身泥。苏晚给他盛了一碗热汤，仍旧什么也没问。
+
+沈砚喝完了汤，才开口：「后山那座坟，是空的。」
+
+苏晚端碗的手停在半空。良久，她低声说：「我知道。」
+
+第二章 空坟
+
+老周是镇上唯一的仵作，也是唯一肯在雨天出门的人。
+
+沈砚找到他时，老周正在院子里磨一把旧刀。听完来意，老周没有抬头，只说：「那坟里埋的不是人。」
+
+「是什么？」
+
+「一件衣裳，一双鞋。」老周把刀放下，「三年前，林青失踪的那天夜里，是程九亲手埋的。」
+
+沈砚记住了这两个名字。临走时，老周忽然又说：「阿晚那丫头，比你看得明白。」
+
+回客栈的路上，沈砚遇见苏晚。苏晚撑着伞，站在桥头，像是在等谁。她说：「你去见过老周了。」
+
+沈砚点头。
+
+「老周这人，说的每句话都是真的，但他只说一半。」苏晚转过身，「你想知道另一半，得去问林青。」
+
+「林青不是失踪了么？」
+
+「是啊。」苏晚走进雨里，「所以你得先找到她。」
+
+第三章 春闱旧事
+
+林青住在城南的旧宅里，门口种着一株枯死的梅。
+
+她开门时，手里还捏着一卷书。看见沈砚，她并不意外，只是侧身让他进来。
+
+「你比我想的慢，砚之。」林青说，「程九等你很久了。」
+
+沈砚在桌边坐下。桌上摊着三份卷子，字迹一模一样。
+
+「三年前的春闱，」林青倒了一杯冷茶，「有三个人写了同一篇文章。一个中了，两个死了。」
+
+「你是哪一个？」
+
+「我是活下来的那个。」林青笑了笑，「程九是死掉的那个。」
+
+窗外起了风。沈砚忽然明白，为什么后山那座坟里只有一件衣裳，却没有尸骨。
+
+「程九现在在哪？」
+
+林青指了指门外。「他一直都在。」
+
+第四章 断刃
+
+程九站在院中，手里握着一把断了的刀。
+
+沈砚没有拔剑。他只是把那张泡烂的地图摊开，放在两人之间的石桌上。
+
+「三年前，你把林青的衣裳埋进后山，是为了让别人以为她死了。」沈砚说，「可你自己也死了。」
+
+程九看着那张图，很久没有说话。雨又开始下。
+
+「那篇文章不是我写的。」程九终于开口，声音很轻，「是林青写的，用我的名字。」
+
+「为什么？」
+
+「因为只有死人，才不会被人追问。」程九把断刀插进泥里，「这些年，我一直在等一个人来问我这句话。你是第一个。」
+
+远处的巷口，苏晚收起了伞。她站在雨里，看着这一幕，没有走近。
+
+沈砚回头时，她已经不见了。
+
+第五章 归途
+
+案子结了。镇上的衙门贴出一张告示，字很少，看的人却很多。
+
+老周照旧在院子里磨刀。他说，这世上的事，一半靠证据，一半靠运气。沈砚说他只信前者，老周笑了笑，没反驳。
+
+林青离开那天，苏晚去送她。两人在桥头站了很久，谁也没有提起程九。
+
+「你会回来吗？」苏晚问。
+
+「不会了。」林青说，「这里没什么值得回来的。」
+
+苏晚点点头。她想，这话说得对，也不对。
+
+沈砚最后来客栈结账。他把房钱放在柜台上，多放了一枚铜板。
+
+「汤很好喝。」他说。
+
+苏晚收下钱，抬起头：「下次路过，还来。」
+
+沈砚没有答应，也没有拒绝。他推开门，外面的雨停了，天光很亮。
+
+苏晚把油灯吹灭，重新坐回柜台后面。`;
+
+const DEMO_NAMES = `沈砚|砚之
+苏晚|阿晚
+老周
+林青
+程九`;
+
+function loadDemo() {
+  $('textInput').value = DEMO_TEXT;
+  $('namesInput').value = DEMO_NAMES;
+  refreshChapterPreview();
+  run();
+  setStatus('已载入 5 章示例 · 换成自己的文本即可', 'ok');
+}
+
+/* =========================================================
+   13. 新手引导
+   ========================================================= */
+const TOUR_KEY = 'cas_tour_seen_v1';
+
+function tourSeen() {
+  try { return localStorage.getItem(TOUR_KEY) === '1'; } catch (_) { return false; }
+}
+function markTourSeen() {
+  try { localStorage.setItem(TOUR_KEY, '1'); } catch (_) { /* 本地存储不可用时忽略 */ }
+}
+function openTour() {
+  $('tour').hidden = false;
+  setTimeout(() => $('tourDone').focus(), 60);
+}
+function closeTour() {
+  $('tour').hidden = true;
+  markTourSeen();
+}
+
+$('tourSkip').addEventListener('click', closeTour);
+$('tourClose').addEventListener('click', closeTour);
+$('tourDone').addEventListener('click', closeTour);
+$('btnTour').addEventListener('click', openTour);
+$('tour').addEventListener('click', e => {
+  if (e.target.classList.contains('tour-backdrop')) closeTour();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !$('tour').hidden) closeTour();
+});
+
+/* =========================================================
+   14. 启动
+   ========================================================= */
+loadDemo();
+if (!tourSeen()) setTimeout(openTour, 600);
+</script>
+</body>
+</html>
