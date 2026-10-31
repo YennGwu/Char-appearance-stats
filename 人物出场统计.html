@@ -210,7 +210,7 @@
     </section>
 
     <section class="step">
-      <div class="step-head"><span class="num">2</span>角色名<span class="tip">每行一个 · 别名用 | 分隔</span></div>
+      <div class="step-head"><span class="num">2</span>角色名<span class="tip">首个为主角</span></div>
       <textarea id="namesInput" placeholder="林语棠|语棠&#10;杨岚&#10;伊比娜"></textarea>
     </section>
 
@@ -278,7 +278,7 @@
       </li>
       <li>
         <span class="n">2</span>
-        <div><b>手动输入角色名</b><span>在「角色名」中填写需要统计的人物，每行一个；有别名时用 | 分隔，例如「林语棠|语棠」。</span></div>
+        <div><b>手动输入角色名</b><span>在「角色名」中填写需要统计的人物，每行一个；有别名时用 | 分隔，例如「林语棠|语棠」。<b style="display:inline;font-size:12px;color:#3b6cf6">第一个角色默认为主角</b>，其余角色中每章出场最多的一位会被高亮。</span></div>
       </li>
       <li>
         <span class="n">3</span>
@@ -436,6 +436,26 @@ function countsAt(i) {
   return arr[i] || [];
 }
 
+let _measure = null;
+function textWidth(str, bold) {
+  if (!_measure) _measure = document.createElement('canvas').getContext('2d');
+  _measure.font = `${bold ? 700 : 500} 13px ${FONT}`;
+  return _measure.measureText(str).width;
+}
+
+/* 主角 = 第一个输入的角色；返回本章除主角外出场最多的一位 */
+function highlightFor(idx) {
+  if (state.names.length < 2) return null;
+  const counts = countsAt(idx);
+  let k = -1, best = 0;
+  for (let j = 1; j < state.names.length; j++) {
+    const v = counts[j] || 0;
+    if (v > best) { best = v; k = j; }
+  }
+  if (k < 0 || best <= 0) return null;
+  return { k, strong: best > (counts[0] || 0) };
+}
+
 function svgEl(tag, attrs, parent) {
   const el = document.createElementNS(SVGNS, tag);
   if (attrs) for (const k in attrs) el.setAttribute(k, attrs[k]);
@@ -569,11 +589,13 @@ function paintChart(ctx, t, live = false) {
 
   const rows = state.names.map((name, k) => ({
     name,
+    k,
     value: lerp(A[k] || 0, B[k] || 0, p),
     color: state.colors[k],
   })).sort((a, b) => b.value - a.value || (a.name < b.name ? -1 : 1));
 
   const shown = rows.slice(0, TOP_N);
+  const hl = highlightFor(idx);
   ctx.barsEl.replaceChildren();
 
   shown.forEach((d, rank) => {
@@ -585,10 +607,21 @@ function paintChart(ctx, t, live = false) {
       y: 0, rx: 4, height: g.barH, width, fill: d.color,
     }, grp);
 
+    const hot = hl && d.k === hl.k;
+    if (hot) {
+      const tw = textWidth(d.name, true);
+      const ph = Math.min(g.rowH - 4, 22);
+      svgEl('rect', {
+        class: 'hl', x: -14 - tw - 7, y: (g.barH - ph) / 2, width: tw + 13, height: ph,
+        rx: 6, fill: hl.strong ? '#1e2329' : d.color,
+        'fill-opacity': hl.strong ? 1 : 0.2,
+      }, grp);
+    }
+
     svgEl('text', {
       class: 'bname', x: -14, y: g.barH / 2,
-      'text-anchor': 'end', 'font-size': 13, 'font-weight': 500,
-      'dominant-baseline': 'middle', fill: '#333a44',
+      'text-anchor': 'end', 'font-size': 13, 'font-weight': hot ? 700 : 500,
+      'dominant-baseline': 'middle', fill: hot && hl.strong ? '#ffffff' : '#333a44',
     }, grp).textContent = d.name;
 
     svgEl('text', {
